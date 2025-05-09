@@ -99,8 +99,11 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+<<<<<<< HEAD
 	thread_current()->;
 	struct thread *child_thread = get_child_tid(&child_thread);
+=======
+>>>>>>> 457bce36b4a5295d0dbfd534105d98f0d5d21734
 	return -1;
 }
 
