@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/fixed-point.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -88,7 +89,10 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int nice;                           /* Nice Value. */
+    fixed_point recent_cpu;             /* Recent CPU. */
     struct list_elem allelem;           /* List element for all threads list. */
+    int64_t wakeup_time;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -98,6 +102,15 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
+  /*modified*/
+  /*alarm*/
+   uint64_t sleepingTime;      /*sleeping time of thread*/
+
+   /*donation*/
+   int og_priority;
+   struct list locks_held ;
+   struct lock* waiting_on_lock; 
+  /*end modified*/
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -106,6 +119,11 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+extern fixed_point load_avg;
+   
+extern struct list sleep_list;  
+
 
 void thread_init (void);
 void thread_start (void);
@@ -130,6 +148,15 @@ void thread_yield (void);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
+/*added*/
+
+bool thread_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux);
+bool lock_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux);
+void nested_donate(struct thread * t);
+void priority_lock_release(struct lock* lock);
+void release_mult_locks(struct lock* lock);
+/* */
+
 int thread_get_priority (void);
 void thread_set_priority (int);
 
@@ -137,5 +164,16 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+void thread_update_priority (struct thread *t);
+void thread_update_all_priorities (void);
+void compare_threads_priorities (struct list_elem *a, struct list_elem *b, void *aux UNUSED);
+void thread_update_load_avg_and_recent_cpu (void);
+void increment_recent_cpu (void);
+
+bool
+thread_wakeup_time_less(const struct list_elem *a, 
+const struct list_elem *b, 
+void *aux UNUSED);
+
 
 #endif /* threads/thread.h */

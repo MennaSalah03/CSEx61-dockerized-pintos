@@ -359,11 +359,7 @@ sub cyl_sectors {
 # Makes sure that the loader is a reasonable size.
 sub read_loader {
     my ($name) = @_;
-<<<<<<< HEAD
-    $name = find_file ("/home/mennasalah/CSEx61-dockerized-pintos/src/userprog/build/loader.bin") if !defined $name;
-=======
-    $name = find_file ("/root/pintos/src/userprog/build/loader.bin") if !defined $name;
->>>>>>> 457bce36b4a5295d0dbfd534105d98f0d5d21734
+    $name = find_file ("/root/pintos/src/threads/build/loader.bin") if !defined $name;
     die "Cannot find loader\n" if !defined $name;
 
     my ($handle);

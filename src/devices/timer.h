@@ -3,15 +3,22 @@
 
 #include <round.h>
 #include <stdint.h>
+#include <debug.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
+
 
 void timer_init (void);
 void timer_calibrate (void);
 
 int64_t timer_ticks (void);
 int64_t timer_elapsed (int64_t);
+
+
+// bool thread_wakeup_time_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 /* Sleep and yield the CPU to other threads. */
 void timer_sleep (int64_t ticks);

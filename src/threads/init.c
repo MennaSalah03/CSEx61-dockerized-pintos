@@ -254,8 +254,10 @@ parse_options (char **argv)
 #endif
       else if (!strcmp (name, "-rs"))
         random_init (atoi (value));
-      else if (!strcmp (name, "-mlfqs"))
-        thread_mlfqs = true;
+      else if (!strcmp(name, "-mlfqs")) {
+          thread_mlfqs = true;
+      }
+      
 #ifdef USERPROG
       else if (!strcmp (name, "-ul"))
         user_page_limit = atoi (value);
@@ -263,6 +265,8 @@ parse_options (char **argv)
       else
         PANIC ("unknown option `%s' (use -h for help)", name);
     }
+
+
 
   /* Initialize the random number generator based on the system
      time.  This has no effect if an "-rs" option was specified.
