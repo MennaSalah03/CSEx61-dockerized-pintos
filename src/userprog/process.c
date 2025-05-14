@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -17,6 +18,8 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/syscall.h"
+#include "threads/synch.h"
 
 /* Used for setup_stack */
 static void push_stack(int order, void **esp, char *token, char **argv, int argc);
@@ -97,11 +100,28 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-	thread_current()->;
-	struct thread *child_thread = get_child_tid(&child_thread);
-	return -1;
+	struct thread *current_thread = thread_current();
+	current_thread->waiting_thread_id = child_tid;
+	struct list *children = &current_thread->children;
+	struct list_elem *child_ptr = list_begin(children);
+	struct thread *child;
+
+	while (child_ptr != list_end(children))
+	{
+		struct thread *child = list_entry(child_ptr, struct thread, child_elem);
+		child_ptr = list_next(child_ptr);
+		if (child->tid == child_tid)
+			break;
+	}
+	if (child == NULL)
+		return -1;
+	
+	lock_acquire(&wait_lock);
+	cond_signal(&child->waiting, &wait_lock);
+	lock_release(&wait_lock);
+	return current_thread->status;
 }
 
 /* Free the current process's resources. */
