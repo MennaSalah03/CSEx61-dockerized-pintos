@@ -3,7 +3,6 @@
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include "userprog/gdt.h"
@@ -20,7 +19,7 @@
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
 #include "threads/synch.h"
-
+#include <stdlib.h>
 /* Used for setup_stack */
 static void push_stack(int order, void **esp, char *token, char **argv, int argc);
 
