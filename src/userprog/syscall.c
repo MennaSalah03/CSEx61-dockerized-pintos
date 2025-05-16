@@ -16,7 +16,6 @@
 #include "userprog/pagedir.h"
 #include "devices/shutdown.h"
 
-#define MAX_FILENAME_LEN 256
 #define MAX_ARGUMENTS 3
 
 
@@ -52,6 +51,17 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+}
+
+
+/* Converts a user-space virtual address into a kernel-accessible pointer, 
+Validating that the memory is properly mapped and exits the process if invalid */
+int getpage_ptr(const void *vaddr) {
+  void *ptr = pagedir_get_page(thread_current()->pagedir, vaddr);
+  if (!ptr)
+    exit(-1);
+  
+  return (int)ptr;
 }
 
 /* Checks the validity of Virtual Address 
@@ -256,7 +266,8 @@ void create_handle(struct intr_frame *f)
 
 /* Creates a new file called file initially initial_size bytes in size
 Returns true if successful, false otherwise */
-bool sys_create(const char *file, unsigned initial_size) {
+bool sys_create(const char *file, unsigned initial_size)
+{
   bool success;
 
   lock_acquire(&file_lock);
@@ -267,7 +278,8 @@ bool sys_create(const char *file, unsigned initial_size) {
 }
 
 /* Handles the remove syscall */
-void remove_handle(struct intr_frame *f) {
+void remove_handle(struct intr_frame *f)
+{
   get_arguments(f, &args[0], 1);
 
   validate_string((const void *)args[0]);
@@ -279,7 +291,8 @@ void remove_handle(struct intr_frame *f) {
 
 /* Deletes the file called file
 Returns true if successful, false otherwise */
-bool sys_remove(const char *file) {
+bool sys_remove(const char *file)
+{
   bool success;
 
   lock_acquire(&file_lock);
@@ -289,13 +302,15 @@ bool sys_remove(const char *file) {
   return success;
 }
 
-void filesize_handle(struct intr_frame *f) {
+void filesize_handle(struct intr_frame *f)
+{
   get_arguments(f, &args[0], 1);
 
   f->eax = sys_filesize(args[0]);
 }
 
-int sys_filesize(int fd) {
+int sys_filesize(int fd)
+{
   lock_acquire(&file_lock);
   struct file *file_ptr = get_file(fd);
 
