@@ -112,7 +112,10 @@ process_wait (tid_t child_tid)
 		struct thread *child = list_entry(child_ptr, struct thread, child_elem);
 		child_ptr = list_next(child_ptr);
 		if (child->tid == child_tid)
+		{	
+			return -1;
 			break;
+		}
 	}
 	if (child == NULL)
 		return -1;

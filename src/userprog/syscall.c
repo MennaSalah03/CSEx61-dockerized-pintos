@@ -17,6 +17,7 @@
 #include "devices/shutdown.h"
 
 #define MAX_FILENAME_LEN 256
+#define MAX_ARGUMENTS 3
 
 
 struct lock file_lock;
@@ -24,8 +25,11 @@ static void syscall_handler (struct intr_frame *);
 
 struct user_file *get_file(int fd);
 
+int getpage_ptr(const void *vaddr);
 bool validate_vaddr(const void* vaddr);
 bool validate_string(const void* string);
+bool validate_buffer(void *buffer, unsigned size);
+int args[MAX_ARGUMENTS];
 
 void exit_handle(struct intr_frame *frame);
 void exit(int status);
@@ -38,6 +42,11 @@ void sys_halt(void);
 void create_handle(struct intr_frame *f);
 bool sys_create(const char *file, unsigned initial_size);
 
+void remove_handle(struct intr_frame *f);
+bool sys_remove(const char *file);
+
+void filesize_handle(struct intr_frame *f);
+int sys_filesize(int fd);
 
 void
 syscall_init (void) 
@@ -54,11 +63,35 @@ bool validate_vaddr(const void* vaddr) {
   return true;
 }
 
-/* Checks the validity of strings like filenames
-Returns False f filename is too long or not null-terminated */
-bool validate_string(const void* filename) {
-  if (strnlen(filename, MAX_FILENAME_LEN) == MAX_FILENAME_LEN)
-    return false;
+/* Checks the validity of strings */
+bool validate_string(const void* string)
+{
+  for (; * (char *) getpage_ptr(string) != 0; string = (char *) string + 1);
+}
+
+/* Get Arguments from the Stack */
+void get_arguments(struct intr_frame *f, int *args, int num_of_args) {
+  int i;
+  int *ptr;
+
+  for (i = 0; i < num_of_args; i++)
+  {
+    ptr = (int *) f->esp + i + 1;
+    validate_vaddr((const void *) ptr);
+    args[i] = *ptr;
+  }
+}
+
+
+bool validate_buffer(void *buffer, unsigned size)
+{
+  unsigned i;
+  char *local_buffer = (char *) buffer;
+  
+  for (i = 0; i < size; i++) {
+    if (!validate_vaddr(local_buffer + i))
+      return false;
+  }
   return true;
 }
 
@@ -66,40 +99,43 @@ bool validate_string(const void* filename) {
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  int *sp = *(int *) f->esp;
-  if (sp == NULL || sp >= PHYS_BASE)
+  int sp = *(int *) f->esp;
+  if (!is_user_vaddr(f->esp) || !validate_vaddr(f->esp))
+  {
     exit(-1);
     return;
+  }
 
-  switch (*sp)
+  switch (sp)
   {
     case SYS_EXIT:
-      return exit_handle(f);
+      exit_handle(f);
       break;
     case SYS_WRITE:
-      return write_handle(f);
+      write_handle(f);
       break;
     case SYS_READ:
     case SYS_FILESIZE:
+      filesize_handle(f);
     case SYS_WAIT:
     case SYS_EXEC:
     case SYS_HALT:
-      return sys_halt();
+      sys_halt();
       break;
     case SYS_OPEN:
     case SYS_CLOSE:
     case SYS_REMOVE:
+      remove_handle(f);
     case SYS_SEEK:
     case SYS_TELL:
     case SYS_CREATE:
-      return create_handle(f);
+      create_handle(f);
       break;
     default:
-      printf("No system call\n");
+      printf("No system call %d\n", sp);
+      exit(-1);
       break;
   }
-  printf ("system call!\n");
-  thread_exit ();
 }
 
 struct user_file *get_file(int fd)
@@ -114,6 +150,7 @@ struct user_file *get_file(int fd)
     
     file = list_next(file);
   }
+  return NULL;
 }
 
 
@@ -131,9 +168,9 @@ void exit_handle(struct intr_frame *frame)
     exit(-1);
     return;
   }
-  status = *((int *) frame->esp + 4);
+  status = *((int *) (frame->esp + 4));
+  frame->eax = 0;
   exit(status); // Exit call
-  return;
 }
 
 /* Terminates the current user program, returning status to the kernel. If the process’s
@@ -144,20 +181,40 @@ void exit(int status)
   struct thread *current_thread = thread_current();
 
   current_thread->exit_status = status;
-  printf("%s exited with status %d\n", thread_name(), status);
+  printf("%s exited with status %d\n", current_thread->name, status);
+
+  //closing opened files
+  struct list_elem *el;
+  while (!list_empty(&current_thread->files))
+  {
+    el = list_begin(&current_thread->files);
+    struct user_file *f = list_entry(el, struct user_file, file_elem);
+    file_close(f->file);
+    list_remove(&f->file_elem);
+  }
+
   thread_exit();
 }
 
 /* Handles the write syscall */
 void write_handle(struct intr_frame *frame)
 {
-  unsigned size;
-  int fd = *((int *) frame->esp + 1);
-  char *buffer = (char *)(*((int *) frame->esp + 2));
-  if (fd == 0 || !is_user_vaddr(buffer))
-    exit(-1); 
 
-  size = (unsigned) (*((int *) frame->esp + 3));
+  if (!validate_vaddr(frame->esp + 4) ||
+      !validate_vaddr(frame->esp + 8) ||
+      !validate_vaddr(frame->esp + 12))
+   {
+    exit(-1);
+    return;
+   }
+  unsigned size = (unsigned) (*((int *) frame->esp + 12));;
+  int fd = *((int *) frame->esp + 4);
+  char *buffer = (char *)(*((int *) frame->esp + 8));
+  if (!validate_buffer(buffer, size))
+  {
+    exit(-1);
+    return;
+  }
   frame->eax = write(fd, buffer, size);
 }
 /* write() writes up to count bytes from the buffer starting at buf to the
@@ -165,13 +222,14 @@ file referred to by the file descriptor fd.
 */
 int write(int fd, void *buffer, unsigned size)
 {
-  struct file *write_file;
+  int size_in_bytes;
+  struct user_file *write_file;
   if (fd == 1)
   {
     lock_acquire(&file_lock);
     putbuf(buffer, size);
     lock_release(&file_lock);
-    return size;
+    return size; // in bytes
   }
   write_file = get_file(fd);
   if (write_file == NULL)
@@ -188,10 +246,66 @@ void sys_halt(void)
 
 void create_handle(struct intr_frame *f)
 {
+  get_arguments(f, &args[0], 2);
 
+  validate_string((const void *)args[0]);
+  args[0] = getpage_ptr((const void *) args[0]);
+
+  f->eax = sys_create((const char *)args[0], (unsigned)args[1]);
 }
 
-bool sys_create(const char *file, unsigned initial_size)
-{
-  return true;
+/* Creates a new file called file initially initial_size bytes in size
+Returns true if successful, false otherwise */
+bool sys_create(const char *file, unsigned initial_size) {
+  bool success;
+
+  lock_acquire(&file_lock);
+  success = filesys_create(file, initial_size);
+  lock_release(&file_lock);
+
+  return success;
+}
+
+/* Handles the remove syscall */
+void remove_handle(struct intr_frame *f) {
+  get_arguments(f, &args[0], 1);
+
+  validate_string((const void *)args[0]);
+  args[0] = getpage_ptr((const void *) args[0]);
+
+  f->eax = sys_remove((const char *)args[0]);
+}
+
+
+/* Deletes the file called file
+Returns true if successful, false otherwise */
+bool sys_remove(const char *file) {
+  bool success;
+
+  lock_acquire(&file_lock);
+  success = filesys_remove(file);
+  lock_release(&file_lock);
+
+  return success;
+}
+
+void filesize_handle(struct intr_frame *f) {
+  get_arguments(f, &args[0], 1);
+
+  f->eax = sys_filesize(args[0]);
+}
+
+int sys_filesize(int fd) {
+  lock_acquire(&file_lock);
+  struct file *file_ptr = get_file(fd);
+
+  if (!file_ptr) {
+    lock_release(&file_lock);
+    return (-1);
+  }
+
+  int filesize = file_length(file_ptr);
+  lock_release(&file_lock);
+
+  return filesize;
 }
