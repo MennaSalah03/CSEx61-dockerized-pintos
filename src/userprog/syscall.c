@@ -127,6 +127,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_READ:
     case SYS_FILESIZE:
       filesize_handle(f);
+      break;
     case SYS_WAIT:
     case SYS_EXEC:
     case SYS_HALT:
@@ -136,6 +137,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_CLOSE:
     case SYS_REMOVE:
       remove_handle(f);
+      break;
     case SYS_SEEK:
     case SYS_TELL:
     case SYS_CREATE:
@@ -311,6 +313,8 @@ void filesize_handle(struct intr_frame *f)
 
 int sys_filesize(int fd)
 {
+  int filesize;
+  
   lock_acquire(&file_lock);
   struct file *file_ptr = get_file(fd);
 
@@ -319,7 +323,7 @@ int sys_filesize(int fd)
     return (-1);
   }
 
-  int filesize = file_length(file_ptr);
+  filesize = file_length(file_ptr);
   lock_release(&file_lock);
 
   return filesize;
