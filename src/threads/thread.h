@@ -106,8 +106,8 @@ struct thread
    struct list_elem child_elem;
    struct condition waiting;
    struct list files;
-
    int exit_status;
+   //int fd_tracker;  //thread.h before magic
 
    /*BEWARE. DONT ADD ANYTHING UNDER magic*/
     /* Owned by thread.c. */

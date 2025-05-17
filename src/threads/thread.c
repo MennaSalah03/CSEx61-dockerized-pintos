@@ -466,11 +466,11 @@ init_thread (struct thread *t, const char *name, int priority)
   cond_init(&t->waiting);
   list_init(&t->children);
   list_init(&t->files);
+  //t->fd_tracker = 2;
   t->waiting_thread_id = -1;
   t->child_exists = false;
   t->child_status = 0;
   t->exit_status = 0;
-
 
 
 

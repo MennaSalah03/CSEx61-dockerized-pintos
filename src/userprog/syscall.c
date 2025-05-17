@@ -16,7 +16,7 @@
 #include "userprog/pagedir.h"
 #include "devices/shutdown.h"
 
-#define MAX_ARGUMENTS 3
+#define MAX_ARGUMENTS 32
 
 
 struct lock file_lock;
@@ -29,6 +29,7 @@ bool validate_vaddr(const void* vaddr);
 bool validate_string(const void* string);
 bool validate_buffer(void *buffer, unsigned size);
 int args[MAX_ARGUMENTS];
+
 
 void exit_handle(struct intr_frame *frame);
 void exit(int status);
@@ -46,6 +47,22 @@ bool sys_remove(const char *file);
 
 void filesize_handle(struct intr_frame *f);
 int sys_filesize(int fd);
+
+
+void open_handle(struct intr_frame *f);
+int sys_open(const char *file);
+
+
+void seek_handle(struct intr_frame *f);
+void seek(int fd, unsigned position);
+
+void close_handle(struct intr_frame *f);
+void close(int fd);
+
+unsigned tell(int fd);
+void tell_handle(struct intr_frame *f);
+void read_handle(struct intr_frame *f);
+int read(int fd, void *buffer, unsigned size);
 
 void
 syscall_init (void) 
@@ -128,16 +145,32 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_FILESIZE:
       filesize_handle(f);
     case SYS_WAIT:
+      printf("Not implemented\n");
+      exit(-1);
+      break;
     case SYS_EXEC:
+      printf("Not implemented\n");
+      exit(-1);
+      break;
     case SYS_HALT:
       sys_halt();
       break;
     case SYS_OPEN:
+      open_handle(f);
+      break;
     case SYS_CLOSE:
+      close_handle(f);
+      exit(-1);
+      break;
     case SYS_REMOVE:
       remove_handle(f);
     case SYS_SEEK:
+      seek_handle(f);
+      break;
     case SYS_TELL:
+      printf("Not implemented\n");
+      exit(-1);
+      break;
     case SYS_CREATE:
       create_handle(f);
       break;
@@ -246,6 +279,10 @@ int write(int fd, void *buffer, unsigned size)
   {
     return -1;
   }
+  lock_acquire(&file_lock);
+  size_in_bytes = file_write(write_file->file, buffer, size);
+  lock_release(&file_lock);
+  return size_in_bytes;
 }
 
  /* Terminates Pintos*/
@@ -323,4 +360,152 @@ int sys_filesize(int fd)
   lock_release(&file_lock);
 
   return filesize;
+}
+
+
+/* Handles the SYS_OPEN system call */
+void open_handle(struct intr_frame *f)
+{
+  // Get the argument (pointer to file name)
+  get_arguments(f, &args[0], 1);
+
+  // Validate the string (file name)
+  validate_string((const void *)args[0]);
+
+  // Convert to kernel virtual address
+  args[0] = getpage_ptr((const void *) args[0]);
+
+  // Call the sys_open function and return result in eax
+  f->eax = sys_open((const char *)args[0]);
+}
+
+/* Opens the file and returns a file descriptor */
+int sys_open(const char *file) {
+  // if (file == NULL)
+  //   return -1;
+
+  // lock_acquire(&file_lock);
+
+  // struct file *opened_file = filesys_open(file);
+
+  // if (opened_file == NULL) {
+  //   lock_release(&file_lock);
+  //   return -1;
+  // }
+
+  // struct thread *curr = thread_current();
+
+  // // Allocate memory for user_file struct
+  // struct user_file *uf = malloc(sizeof(struct user_file));
+  // if (!uf) {
+  //   file_close(opened_file);
+  //   lock_release(&file_lock);
+  //   return -1;
+  // }
+
+  // uf->file = opened_file;
+  // uf->fd = curr->fd_tracker++;
+
+  // // Add to current thread's file list
+  // list_push_back(&curr->files, &uf->file_elem);
+
+  // lock_release(&file_lock);
+
+  // return uf->fd;
+}
+
+void seek_handle(struct intr_frame *f) {
+  get_arguments(f, &args[0], 2);
+  int fd = args[0];
+  unsigned position = args[1];
+
+  seek(fd, position);
+}
+void seek(int fd, unsigned position) {
+  struct user_file *uf = get_file(fd);
+  if (uf == NULL)
+    return;
+
+  lock_acquire(&file_lock);
+  file_seek(uf->file, position);
+  lock_release(&file_lock);
+}
+
+void close_handle(struct intr_frame *f) {
+  get_arguments(f, &args[0], 1);
+  close(args[0]);
+}
+void close(int fd) {
+  struct user_file *uf = get_file(fd);
+  if (uf == NULL)
+    return;
+
+  lock_acquire(&file_lock);
+  file_close(uf->file);                     // Close the file
+  list_remove(&uf->file_elem);             // Remove from thread's file list
+  free(uf);                                 // Free the memory
+  lock_release(&file_lock);
+}
+void read_handle(struct intr_frame *frame)
+{
+  int args[3];
+  get_arguments(frame, args, 3);
+  int fd = args[0];;
+  void *buffer = (void *)args[1];
+  unsigned size = (unsigned) args[2];
+
+  if (!is_user_vaddr(buffer)  || !is_user_vaddr((uint8_t *)buffer + size - 1))
+    exit(-1);
+  validate_buffer(buffer, size);
+  frame->eax = read(fd, buffer, size);
+
+}
+/*Reads size bytes from the file open as fd into buffer. Returns the number of bytes
+actually read (0 at end of file), or -1 if the file could not be read (due to a condition
+other than end of file). Fd 0 reads from the keyboard using input_getc().*/
+/* Read system call handler */
+int read(int fd, void *buffer, unsigned size) {
+    //standard input (keyboard)
+    if (fd == 0) {
+        unsigned i;
+        uint8_t* buf = (uint8_t*)buffer;
+        for (i = 0; i < size; i++) {
+            buf[i] = input_getc();
+            if (buf[i] == '\n')
+                break;
+        }
+        return i;
+    }
+    
+    // Get file from file
+    struct user_file *uf = get_file(fd);
+    if (uf == NULL)
+        return -1;
+        
+    // Read from file
+    lock_acquire(&file_lock);
+    int bytes_read = file_read(uf->file, buffer, size);
+    lock_release(&file_lock);
+    
+    return bytes_read;
+}
+
+void tell_handle(struct intr_frame *f) {
+  int args[1];
+  get_arguments(f, args, 1);
+  int fd = args[0];
+  f->eax = tell(fd);
+}
+/*Returns the position of the next byte to be read or written in open  le fd, expressed
+in bytes from the beginning of the file.*/
+unsigned tell(int fd) {
+  struct user_file *uf = get_file(fd);
+  if (uf == NULL || uf->file == NULL)
+    return 0;
+
+  lock_acquire(&file_lock);
+  unsigned next_byte_pos = file_tell(uf->file);
+  lock_release(&file_lock);
+
+  return next_byte_pos;
 }

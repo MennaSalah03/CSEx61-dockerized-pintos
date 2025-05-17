@@ -20,6 +20,8 @@
 #include "userprog/syscall.h"
 #include "threads/synch.h"
 #include <stdlib.h>
+
+
 /* Used for setup_stack */
 static void push_stack(int order, void **esp, char *token, char **argv, int argc);
 
@@ -78,6 +80,8 @@ start_process (void *file_name_)
 	palloc_free_page (file_name);
 	if (!success)
 		thread_exit ();
+
+	printf("Process successfully started!\n");
 
 	/* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -482,7 +486,8 @@ setup_stack (void **esp, const char* file_name, char** save_ptr)
 
 		char **argv = malloc(2 * sizeof(char *));
 
-		if (argv != NULL ){
+		if (argv != NULL)
+		{
 			int argc = 0;
 			int argv_size = 2;
 			char *token = (char *) file_name;
@@ -504,7 +509,8 @@ setup_stack (void **esp, const char* file_name, char** save_ptr)
 
 			/* align words */
 			int size = (size_t) *esp % 4;
-			if (size != 0) {
+			if (size != 0)
+			{
 				memcpy(*esp-=size, &argv[argc], size);
 			}
 
@@ -513,24 +519,30 @@ setup_stack (void **esp, const char* file_name, char** save_ptr)
 
 			int number_of_arg = argc;
 			/* push all argv */
-			while (number_of_arg >= 0) {
+			while (number_of_arg >= 0)
+			{
 				*esp -= sizeof(char *);
 				memcpy(*esp, &argv[number_of_arg--], sizeof(char *));
 			}
 
 			/* push argv, argc, and return address in order */
-			for (int order = 1; order < 4; order++) {
+			for (int order = 1; order < 4; order++)
+			{
 				push_stack(order, esp, token, argv, argc);
 			}
 
 			/* free the argv */
 			free(argv);
-		} else {
+		}
+		else
+		{
 			return false;
 		}
 		return success;
 
-	} else {
+	}
+	else
+	{
 		return success;
 	}
 }
